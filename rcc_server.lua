@@ -120,5 +120,5 @@ end
 while run
 do
  onMessage(event.pull('modem_message'))
- os.sleep(0.5)
+ os.sleep(0.1)
 end

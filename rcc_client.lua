@@ -4,11 +4,13 @@ local event = require('event')
 local term = require('term')
 local shell = require('shell')
 local fs = require('filesystem')
+local thread = require('thread')
 
 local args, options = shell.parse(...)
 
 if options.help then
     print('rcc_client [--debug]')
+    print('rcc_client upload [file path]')
     os.exit()
 end
 
@@ -94,11 +96,12 @@ event.listen('modem_message', onMessage)
 modem.broadcast(369, 'rcc ping')
 while not is_pinged do
     time = time + 0.1
-    os.sleep(0.1)
+    modem.broadcast(369, 'rcc ping')
     if time > 5 then
         io.stderr:write('Can\'t connect to server.')
         os.exit()
     end
+    os.sleep(0.1)
 end
 
 os.sleep(1)
@@ -113,9 +116,9 @@ local function bytesToSize(bytes)
     if((bytes >= 0) and (bytes < kilobyte)) then
       return bytes .. " bytes";
     elseif((bytes >= kilobyte) and (bytes < megabyte)) then
-      return math.ceil(bytes / kilobyte) .. ' KB';
+      return math.floor(bytes / kilobyte) .. ' KB';
     elseif((bytes >= megabyte)) then
-      return math.ceil(bytes / megabyte) .. ' MB';
+      return math.floor(bytes / megabyte) .. ' MB';
     end
 end
 
@@ -133,10 +136,19 @@ local function sendFile(path)
     while(not readyToSendFile) do
         os.sleep(0.1)
     end
+    local cancelled = false
     local bytes = ''
-    while read < size do
+    local t = thread.create(function ()
+        term.setCursor(1, y + 1)
+        term.write('Press Ctrl + C to cancel upload')
+        local value = event.pull('interrupt')
+        cancelled = true
+        term.setCursor(1, y + 1)
+        term.clearLine()
+        print('Wait...')
+    end)
+    while read < size and not cancelled do
         bytes = file:read(3000)
-        print(read .. ' - ' .. size)
         if bytes ~= nil then
             read = read + #bytes
         end
@@ -145,9 +157,18 @@ local function sendFile(path)
             os.sleep(0.05)
             modem.broadcast(369, bytes)
         end
-        term.setCursor(1, y + 1)
-        term.write(string.format('Sending file... Sended %s of %s ', bytesToSize(read), bytesToSize(size)))
+        term.setCursor(1, y)
+        term.clearLine()
+        term.write(string.format('Sending file... Sended %s of %s (%.2f %%)', bytesToSize(read), bytesToSize(size), read/size * 100))
     end
+    if cancelled then
+        os.sleep(1)
+        modem.broadcast(369, 'rcc cancelSendFile')
+        term.setCursor(1, y + 2)
+        print('File sent cancelled')
+        os.exit()
+    end
+    t:kill()
     term.setCursor(1, y + 2)
     os.sleep(1)
     local datas = {}
@@ -174,7 +195,7 @@ local function listenCommands()
             time = time + 0.1
             if time > 5
             then 
-                io.stderr:write('Server did\'nt answered after five seconds.')
+                io.stderr:write('Server did\'nt answer after five seconds.')
                 break
             end
         else 
@@ -193,9 +214,9 @@ local function listenCommands()
 end
 
 if args[1] ~= nil then
-    if args[1] == 'file' then
+    if args[1] == 'upload' then
         if args[2] == nil then
-            print('rcc_client file [path]')
+            print('rcc_client upload [file path]')
             os.exit()
         end
         sendFile(args[2])
