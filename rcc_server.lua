@@ -12,7 +12,7 @@ if component.modem == nil then
 end
 
 local m = component.modem
-print("Remote Computer Control Server v1")
+print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]")
 m.open(369)
 
 local run = true

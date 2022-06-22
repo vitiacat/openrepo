@@ -12,7 +12,7 @@ if options.help then
     os.exit()
 end
 
-print('Remote Computer Control Client v1\nConnecting...')
+print('Remote Computer Control Client v1 [by DesConnet and Vitiacat]\nConnecting...')
 
 modem.open(369)
 
