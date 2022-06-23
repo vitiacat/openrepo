@@ -1,4 +1,4 @@
-## Remote Computer
+## Remote Computer Control
 Программа для OpenOS предназаченная для удаленного управления компьютером посредством локальной сети
 
 ![client_screen](https://user-images.githubusercontent.com/31757032/175316939-2e22558e-4d60-43dc-b57c-fb57aedd60bc.png)
