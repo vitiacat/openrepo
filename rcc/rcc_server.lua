@@ -11,15 +11,15 @@ local m = component.modem
 
 print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]")
 
-if not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc.cfg')) then
+if not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc/rcc.cfg')) then
     io.stderr:write('Config file "rcc.cfg" not found')
     os.exit()
-elseif not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc_users.cfg')) then
+elseif not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc/rcc_users.cfg')) then
     io.stderr:write('Config file "rcc_users.cfg" not found')
     os.exit()
 end
 
-local users = rcc_utils.cfgParse(io.open('rcc_users.cfg', 'r'))
+local users = rcc_utils.cfgParse(io.open('rcc/rcc_users.cfg', 'r'))
 
 if args[1] ~= nil then
     if args[1] == 'users' then
@@ -56,7 +56,7 @@ if args[1] ~= nil then
     end
 end
 
-local config = rcc_utils.cfgParse(io.open('rcc.cfg', 'r'))
+local config = rcc_utils.cfgParse(io.open('rcc/rcc.cfg', 'r'))
 local blockedCommands = rcc_utils.Split(config.blockedCommands, ',')
 
 m.open(tonumber(config.port))
