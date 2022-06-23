@@ -5,6 +5,7 @@ local term = require('term')
 local shell = require('shell')
 local fs = require('filesystem')
 local thread = require('thread')
+local sha256 = require('sha256')
 
 local args, options = shell.parse(...)
 
@@ -21,6 +22,7 @@ modem.open(369)
 local server_answered = true
 local time = 0
 local is_pinged = false
+local is_logged = false
 local readyToSendFile = false
 local continueSendFile = true
 local current_directory = '/home'
@@ -59,13 +61,12 @@ local function onMessage(_, _, from, port, _, message)
         text = text .. sp[i]
     end
 
-
     -- id = 1 - ping, 2 - command answer, 3 - rcc answers, 4 - error --
     if id == '2' then
         continue = false
         server_answered = true
         os.sleep(0.3)
-        print(text)
+        if text ~= '' then print(text) end
         modem.broadcast(369, 'rcc getCurrentDirectory')
         continue = true
     elseif id == '3' then
@@ -80,10 +81,20 @@ local function onMessage(_, _, from, port, _, message)
             is_pinged = true
         elseif arr[1] == 'sendFile' then
             readyToSendFile = true
+        elseif arr[1] == 'login' then
+            if arr[2] == 'ok' then
+                is_logged = true
+            else
+                io.stderr:write('Login failed')
+                is_logged = 2
+            end
         end
     elseif id == '4' then
         io.stderr:write(text .. '\n')
         server_answered = true
+        if args[1] == 'upload' then
+            os.exit()
+        end
     elseif id == '1' then
         continueSendFile = true
     end
@@ -104,7 +115,26 @@ while not is_pinged do
     os.sleep(0.1)
 end
 
-os.sleep(1)
+os.sleep(0.5)
+time = 0
+
+io.write('Username: ')
+local username = io.read()
+io.write('Password: ')
+local password = io.read()
+modem.broadcast(369, 'rcc login ' .. username .. ' ' .. sha256(password))
+while not is_logged do
+    time = time + 0.1
+    if time > 5 then
+        io.stderr:write('Login timeout.')
+        os.exit()
+    end
+    os.sleep(0.1)
+end
+
+if is_logged == 2 then
+    os.exit()
+end
 
 print('Connected.')
 time = 0
@@ -116,9 +146,9 @@ local function bytesToSize(bytes)
     if((bytes >= 0) and (bytes < kilobyte)) then
       return bytes .. " bytes";
     elseif((bytes >= kilobyte) and (bytes < megabyte)) then
-      return math.floor(bytes / kilobyte) .. ' KB';
+      return string.format('%.1f KiB', bytes / kilobyte);
     elseif((bytes >= megabyte)) then
-      return math.floor(bytes / megabyte) .. ' MB';
+      return string.format('%.1f MiB', bytes / megabyte);
     end
 end
 
@@ -138,6 +168,7 @@ local function sendFile(path)
     end
     local cancelled = false
     local bytes = ''
+    local sendedBytes = 0
     local t = thread.create(function ()
         term.setCursor(1, y + 1)
         term.write('Press Ctrl + C to cancel upload')
@@ -147,42 +178,50 @@ local function sendFile(path)
         term.clearLine()
         print('Wait...')
     end)
+    local t2 = thread.create(function ()
+        while not cancelled do
+            os.sleep(1)
+            sendedBytes = 0
+        end
+    end)
     while read < size and not cancelled do
-        bytes = file:read(3000)
+        bytes = file:read(1024)
         if bytes ~= nil then
             read = read + #bytes
+            sendedBytes = sendedBytes + #bytes
         end
         continueSendFile = false
+        time = 0
         while(not continueSendFile) do
+            if time >= 3 then
+                cancelled = true
+                break
+            end
             os.sleep(0.05)
             modem.broadcast(369, bytes)
+            time = time + 0.05
         end
-        term.setCursor(1, y)
-        term.clearLine()
-        term.write(string.format('Sending file... Sended %s of %s (%.2f %%)', bytesToSize(read), bytesToSize(size), read/size * 100))
+        if not cancelled then
+            term.setCursor(1, y)
+            term.clearLine()
+            term.write(string.format('Sending file... Sended %s of %s (%.2f %%), avg time: %.1f sec', bytesToSize(read), bytesToSize(size), read/size * 100, (size - read) / 8000))
+        end
     end
     if cancelled then
         os.sleep(1)
         modem.broadcast(369, 'rcc cancelSendFile')
         term.setCursor(1, y + 2)
-        print('File sent cancelled')
+        if time >= 2.5 then
+            print('File sent timeout')
+        else
+            print('File sent cancelled')
+        end
         os.exit()
     end
     t:kill()
+    t2:kill()
     term.setCursor(1, y + 2)
     os.sleep(1)
-    local datas = {}
-    for address, name in component.list("data", true) do
-        table.insert(datas, component.proxy(address))
-    end
-    --local hash = ''
-    --if #datas == 0 then
-    --    print('\27[33mWARN: Data Card is not installed! Couldn\'t get file hash and verify it. ;-;\27[37m')
-    --else
-    --    file:seek("set")
-    --    hash = component.invoke(datas[0], "md5", file:read(size))
-    --end
-    --print(hash)
     modem.broadcast(369, 'rcc endSendFile ')
     print('File has been sent.')
     os.exit()
@@ -205,6 +244,9 @@ local function listenCommands()
                 io.write('\27[32m' .. current_directory .. '\27[37m' .. ' \27[31m> \27[37m')
                 text = io.read()
                 if text ~= '' then
+                    if text == 'clear' then
+                        term.clear()
+                    end
                     modem.broadcast(369, text)
                     server_answered = false
                 end
