@@ -3,36 +3,75 @@ local event = require("event")
 local shell = require("shell")
 local fs = require('filesystem')
 local process = require('process')
-local inspect = require('inspect')
+local rcc_utils = require('rcc_utils')
+local sha256 = require('sha256')
+local args = shell.parse(...)
 
+local m = component.modem
 
-if component.modem == nil then
-    print('This program requires modem.')
+print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]")
+
+if not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc.cfg')) then
+    io.stderr:write('Config file "rcc.cfg" not found')
+    os.exit()
+elseif not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc_users.cfg')) then
+    io.stderr:write('Config file "rcc_users.cfg" not found')
     os.exit()
 end
 
-local m = component.modem
-print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]")
-m.open(369)
+local users = rcc_utils.cfgParse(io.open('rcc_users.cfg', 'r'))
+
+if args[1] ~= nil then
+    if args[1] == 'users' then
+        if args[2] == nil then
+            print('Usage: rcc_server users add/remove')
+            os.exit()
+        elseif args[2] == 'add' then
+            if args[3] == nil or args[4] == nil then
+                print('Usage: rcc_server users add [username] [password]')
+                os.exit()
+            end
+            if users[args[3]] ~= nil then
+                io.stderr:write('User exists')
+                os.exit()
+            end
+            users[args[3]] = sha256(args[4])
+            rcc_utils.cfgSave(users, 'rcc_users.cfg')
+            print('User with username "'..args[3]..'" has been created.')
+            os.exit()
+        elseif args[2] == 'remove' then
+            if args[3] == nil then
+                print('Usage: rcc_server users remove [username]')
+                os.exit()
+            end
+            if users[args[3]] == nil then
+                io.stderr:write('User not found')
+                os.exit()
+            end
+            users[args[3]] = nil
+            rcc_utils.cfgSave(users, 'rcc_users.cfg')
+            print('User with username "'..args[3]..'" has been removed.')
+            os.exit()
+        end
+    end
+end
+
+local config = rcc_utils.cfgParse(io.open('rcc.cfg', 'r'))
+local blockedCommands = rcc_utils.Split(config.blockedCommands, ',')
+
+m.open(tonumber(config.port))
 
 local run = true
 local commands_directory = '/bin/'
 local current_directory = shell.getWorkingDirectory()
 local isSendingFile = false
 local file = nil
-
-local function split(s, delimiter)
-    local result = {};
-    for match in (s..delimiter):gmatch("(.-)"..delimiter) do
-        table.insert(result, match);
-    end
-    return result;
-end
+local connections = {}
 
 local latest_msg_id = 0
 
 local function send(address, id, message)
-    m.send(address, 369, latest_msg_id .. ';' .. id .. ';' .. message)
+    m.send(address, tonumber(config.port), latest_msg_id .. ';' .. id .. ';' .. message)
     latest_msg_id = latest_msg_id + 1
 end
 
@@ -46,18 +85,13 @@ local function onMessage(_, _, from, port, _, msg)
         do return end
     end
 
-    print('Send message: ' .. msg)
+    --print('Send message: ' .. msg)
 
-    local sp = split(msg, ' ')
+    local sp = rcc_utils.Split(msg, ' ')
     local command = sp[1]
     local args = ''
     for i = 2, #sp, 1 do
         args = args .. sp[i] .. ' '
-    end
-
-    if command == 'exit' then
-        run = false
-        do return end
     end
 
     if command == 'rcc' then
@@ -66,11 +100,30 @@ local function onMessage(_, _, from, port, _, msg)
         end
         local subcommand = sp[2]
 
-        if subcommand == 'getCurrentDirectory' then
-            send(from, 3, 'getCurrentDirectory' .. ' ' .. current_directory)
+        --Authorization
+        if subcommand == 'login' then
+            local username = sp[3]
+            local password = sp[4]
+            if users[username] == nil then
+                send(from, 3, 'login fail')
+                do return end
+            end
+            if users[username] ~= password then
+                send(from, 3, 'login fail')
+                do return end
+            end
+            send(from, 3, 'login ok')
+            connections[from] = username
+        --Authorization
         elseif subcommand == 'ping' then
             send(from, 3, 'ping')
-        elseif subcommand == 'sendFile' then
+        elseif subcommand == 'getCurrentDirectory' and connections[from] ~= nil  then
+            send(from, 3, 'getCurrentDirectory' .. ' ' .. current_directory)
+        elseif subcommand == 'sendFile' and connections[from] ~= nil then
+            if not config.isSendingFileAllowed then
+                send(from, 4, 'File sending is disabled on this server')
+                do return end
+            end
             isSendingFile = true
             local path = getPath(sp[3], '/')
             if fs.exists(path) == false then
@@ -78,11 +131,16 @@ local function onMessage(_, _, from, port, _, msg)
             end
             file = io.open(sp[3], 'w')
             send(from, 3, 'sendFile')
-        elseif subcommand == 'endSendFile' then
+        elseif subcommand == 'endSendFile' and connections[from] ~= nil then
             isSendingFile = false
             file:close()
             send(from, 3, 'endSendFile')
         end
+        do return end
+    end
+
+    if connections[from] == nil then
+        send(from, 4, 'Unauthorized')
         do return end
     end
 
@@ -93,12 +151,14 @@ local function onMessage(_, _, from, port, _, msg)
     end
 
     print("Executed function: " .. tostring(msg))
-    if command == 'cd' then
+    if rcc_utils.HasValue(blockedCommands, command) then
+            send(from, 4, 'Command is blocked on this server')
+            do return end
+    elseif command == 'cd' then
         current_directory = args
         shell.setWorkingDirectory(current_directory)
         send(from, 2, 'OK')
     else
-        print(current_directory)
         if fs.exists(commands_directory .. '/' .. command .. '.lua') then
             local program = io.popen(commands_directory .. '/' .. command .. '.lua ' .. args, 'r')
             local result = ''
@@ -107,8 +167,7 @@ local function onMessage(_, _, from, port, _, msg)
             end
             send(from, 2, result)
         else
-            print('Program ' .. command .. ' not exists')
-            send(from, 4, 'Program not exists')
+            send(from, 4, 'Program don\'t exists')
             do return end
         end
 
