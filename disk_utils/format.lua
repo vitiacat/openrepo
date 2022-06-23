@@ -1,6 +1,5 @@
 local fs = require('filesystem')
 local shell = require('shell')
-local inspect = require('inspect')
 local args, options = shell.parse(...)
 if args[1] == nil then
 	print('Usage: format [drive UUID (3 chars)/drive label]')
@@ -9,6 +8,7 @@ end
 local disk = fs.proxy(args[1])
 if disk == nil then
 	print('Drive not found.')
+	os.exit()
 end
 print(disk.address .. ' - ' .. (disk.getLabel() or '<without label>'))
 print('Are you sure want to format this drive? y/n')
@@ -23,7 +23,7 @@ if answer == 'y' or answer == 'yes' or answer == 'Y' then
 	if label == '' then label = nil end
 	disk.setLabel(label)
 		-- format the drive
-	for index, name in ipairs(disk.list('/')) do
+	for _, name in ipairs(disk.list('/')) do
 		print('Removing /' .. name)
 		disk.remove('/' .. name)
 	end
