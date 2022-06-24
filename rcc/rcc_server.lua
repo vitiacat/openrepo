@@ -5,16 +5,23 @@ local fs = require('filesystem')
 local thread = require('thread')
 local rcc_utils = require('rcc_utils')
 local sha256 = require('sha256')
+local process = require('process')
 local args, options = shell.parse(...)
 
+local function getPath(str,sep)
+    sep=sep or'/'
+    return str:match("(.*"..sep..")")
+end
+
 local m = component.modem
+local pPath = getPath(shell.resolve(process.info().path), '/')
 
 print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]\nPress Ctrl+C to exit (or rcc_server kill if server working in background)")
 
-if not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc/rcc.cfg')) then
+if not fs.exists(fs.concat(pPath, 'rcc/rcc.cfg')) then
     io.stderr:write('Config file "rcc.cfg" not found')
     os.exit()
-elseif not fs.exists(fs.concat(shell.getWorkingDirectory(), 'rcc/rcc_users.cfg')) then
+elseif not fs.exists(fs.concat(pPath, 'rcc/rcc_users.cfg')) then
     io.stderr:write('Config file "rcc_users.cfg" not found')
     os.exit()
 end
@@ -23,6 +30,7 @@ local users = rcc_utils.cfgParse(io.open('rcc/rcc_users.cfg', 'r'))
 
 if options.help then
     print('rcc_server users add/remove - add or remove user\nrcc_server kill - kill running server\nrcc_server --background - run server in background')
+    return
 end
 
 if args[1] ~= nil then
@@ -60,9 +68,9 @@ if args[1] ~= nil then
     end
     if args[1] == 'kill' then
         print('Killing server...')
-        io.open(shell.getWorkingDirectory() .. '/rcc/.exit', 'w'):close()
+        io.open(pPath .. '/rcc/.exit', 'w'):close()
         os.sleep(1)
-        fs.remove(shell.getWorkingDirectory() .. '/rcc/.exit')
+        fs.remove(pPath .. '/rcc/.exit')
         print('Killed')
         return
     end
@@ -95,11 +103,6 @@ local function main()
     local function send(address, id, message)
         m.send(address, tonumber(config.port), latest_msg_id .. ';' .. id .. ';' .. message)
         latest_msg_id = latest_msg_id + 1
-    end
-
-    local function getPath(str,sep)
-        sep=sep or'/'
-        return str:match("(.*"..sep..")")
     end
 
     local function onMessage(_, _, from, port, _, msg)
@@ -237,8 +240,8 @@ local function main()
 
     while run do
         if options.background then
-            if fs.exists(shell.getWorkingDirectory() .. '/rcc/.exit') then
-                fs.remove(shell.getWorkingDirectory() .. '/rcc/.exit')
+            if fs.exists(pPath.. '/rcc/.exit') then
+                fs.remove(pPath .. '/rcc/.exit')
                 run = false
             end
         end
