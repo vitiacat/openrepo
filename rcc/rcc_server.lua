@@ -18,15 +18,19 @@ local pPath = getPath(shell.resolve(process.info().path), '/')
 
 print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]\nPress Ctrl+C to exit (or rcc_server kill if server working in background)")
 
-if not fs.exists('rcc/rcc.cfg') then
+if options.debug then
+    print('Path: ' .. pPath)
+end
+
+if not fs.exists(fs.concat(pPath, 'rcc/rcc.cfg')) then
     io.stderr:write('Config file "rcc.cfg" not found')
     os.exit()
-elseif not fs.exists('rcc/rcc_users.cfg') then
+elseif not fs.exists(fs.concat(pPath, 'rcc/rcc_users.cfg')) then
     io.stderr:write('Config file "rcc_users.cfg" not found')
     os.exit()
 end
 
-local users = rcc_utils.cfgParse(io.open('rcc/rcc_users.cfg', 'r'))
+local users = rcc_utils.cfgParse(io.open(fs.concat(pPath, 'rcc/rcc_users.cfg'), 'r'))
 
 if options.help then
     print('rcc_server users add/remove - add or remove user\nrcc_server kill - kill running server\nrcc_server --background - run server in background')
@@ -48,7 +52,7 @@ if args[1] ~= nil then
                 os.exit()
             end
             users[args[3]] = sha256(args[4])
-            rcc_utils.cfgSave(users, 'rcc/rcc_users.cfg')
+            rcc_utils.cfgSave(users, fs.concat(pPath, 'rcc/rcc_users.cfg'))
             print('User with username "'..args[3]..'" has been created.')
             os.exit()
         elseif args[2] == 'remove' then
@@ -61,16 +65,16 @@ if args[1] ~= nil then
                 os.exit()
             end
             users[args[3]] = nil
-            rcc_utils.cfgSave(users, 'rcc/rcc_users.cfg')
+            rcc_utils.cfgSave(users, fs.concat(pPath, 'rcc/rcc_users.cfg'))
             print('User with username "'..args[3]..'" has been removed.')
             os.exit()
         end
     end
     if args[1] == 'kill' then
         print('Killing server...')
-        io.open('rcc/.exit', 'w'):close()
+        io.open(fs.concat(pPath, '/rcc/.exit'), 'w'):close()
         os.sleep(1)
-        fs.remove('rcc/.exit')
+        fs.remove(fs.concat(pPath, '/rcc/.exit'))
         print('Killed')
         return
     end
@@ -78,7 +82,7 @@ end
 
 local function main()
 
-    local config = rcc_utils.cfgParse(io.open('rcc/rcc.cfg', 'r'))
+    local config = rcc_utils.cfgParse(io.open(fs.concat(pPath, 'rcc/rcc.cfg'), 'r'))
     local blockedCommands = rcc_utils.Split(config.blockedCommands, ',')
 
     if m.isOpen(tonumber(config.port)) then
@@ -232,6 +236,7 @@ local function main()
 
     if not options.background then
         event.listen('interrupted', function ()
+            print('Closing...')
             run = false
         end)
     end
@@ -240,12 +245,16 @@ local function main()
 
     while run do
         if options.background then
-            if fs.exists('/rcc/.exit') then
-                fs.remove('/rcc/.exit')
+            if fs.exists(fs.concat(pPath, '/rcc/.exit')) then
+                fs.remove(fs.concat(pPath, '/rcc/.exit'))
                 run = false
             end
         end
-        os.sleep(5)
+        if options.background then
+            os.sleep(5)
+        else
+            os.sleep(1)
+        end
     end
 
     m.close(tonumber(config.port))
