@@ -7,4 +7,4 @@
 #### Запуск
 Для скачивания и запуска скрипта используется команда **wget** а так-же интернет карта которую необходимо вставить в компьютер
 
-``wget -f https://raw.githubusercontent.com/VitiaCatDragon/openrepo/main/installer.lua && installer``
+```wget -f https://raw.githubusercontent.com/VitiaCatDragon/openrepo/main/installer.lua && installer```
