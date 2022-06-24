@@ -9,6 +9,19 @@ local function create_set(...)
   local space_chars   = create_set(" ", "\t", "\r", "\n")
   local delim_chars   = create_set(" ", "\t", "\r", "\n", "]", "}", ",")
   local escape_chars  = create_set("\\", "/", '"', "b", "f", "n", "r", "t", "u")
+  local escape_char_map = {
+    [ "\\" ] = "\\",
+    [ "\"" ] = "\"",
+    [ "\b" ] = "b",
+    [ "\f" ] = "f",
+    [ "\n" ] = "n",
+    [ "\r" ] = "r",
+    [ "\t" ] = "t",
+  }
+  local escape_char_map_inv = { [ "/" ] = "/" }
+  for k, v in pairs(escape_char_map) do
+    escape_char_map_inv[v] = k
+  end
   local literals      = create_set("true", "false", "null")
   local literal_map = {
     [ "true"  ] = true,
