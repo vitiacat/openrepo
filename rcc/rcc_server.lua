@@ -18,10 +18,10 @@ local pPath = getPath(shell.resolve(process.info().path), '/')
 
 print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]\nPress Ctrl+C to exit (or rcc_server kill if server working in background)")
 
-if not fs.exists(fs.concat(pPath, 'rcc/rcc.cfg')) then
+if not fs.exists('rcc/rcc.cfg') then
     io.stderr:write('Config file "rcc.cfg" not found')
     os.exit()
-elseif not fs.exists(fs.concat(pPath, 'rcc/rcc_users.cfg')) then
+elseif not fs.exists('rcc/rcc_users.cfg') then
     io.stderr:write('Config file "rcc_users.cfg" not found')
     os.exit()
 end
@@ -68,9 +68,9 @@ if args[1] ~= nil then
     end
     if args[1] == 'kill' then
         print('Killing server...')
-        io.open(pPath .. '/rcc/.exit', 'w'):close()
+        io.open('rcc/.exit', 'w'):close()
         os.sleep(1)
-        fs.remove(pPath .. '/rcc/.exit')
+        fs.remove('rcc/.exit')
         print('Killed')
         return
     end
@@ -240,8 +240,8 @@ local function main()
 
     while run do
         if options.background then
-            if fs.exists(pPath.. '/rcc/.exit') then
-                fs.remove(pPath .. '/rcc/.exit')
+            if fs.exists('/rcc/.exit') then
+                fs.remove('/rcc/.exit')
                 run = false
             end
         end
