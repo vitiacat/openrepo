@@ -16,7 +16,7 @@ end
 local m = component.modem
 local pPath = getPath(shell.resolve(process.info().path), '/')
 
-print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]\nPress Ctrl+C to exit (or rcc_server kill if server working in background)")
+print("Remote Computer Control Server v1 [by DesConnet and Vitiacat]\nPress Ctrl+C to exit (or type rcc_server kill)")
 
 if options.debug then
     print('Path: ' .. pPath)
@@ -72,9 +72,7 @@ if args[1] ~= nil then
     end
     if args[1] == 'kill' then
         print('Killing server...')
-        io.open(fs.concat(pPath, '/rcc/.exit'), 'w'):close()
-        os.sleep(1)
-        fs.remove(fs.concat(pPath, '/rcc/.exit'))
+        event.push('rcc_kill')
         print('Killed')
         return
     end
@@ -242,19 +240,12 @@ local function main()
     end
 
     event.listen('modem_message', onMessage)
+    event.listen('rcc_kill', function ()
+        run = false
+    end)
 
     while run do
-        if options.background then
-            if fs.exists(fs.concat(pPath, '/rcc/.exit')) then
-                fs.remove(fs.concat(pPath, '/rcc/.exit'))
-                run = false
-            end
-        end
-        if options.background then
-            os.sleep(5)
-        else
-            os.sleep(1)
-        end
+        os.sleep(1)
     end
 
     m.close(tonumber(config.port))
